@@ -1,0 +1,13 @@
+node_modules/
+dist/
+out/
+
+# Never commit credentials. The real token lives encrypted in %APPDATA%,
+# but these are listed defensively in case anything is ever created here.
+.env
+.env.*
+config.json
+*.token
+
+# local UI preview harness (not part of the app)
+dev-preview.html

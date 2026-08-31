@@ -1,0 +1,1028 @@
+/* Canvas Sticky — a paper note that floats over the desktop. */
+
+:root {
+  --paper: #fdf6e3;
+  --paper-edge: #f4e7c3;
+  --head: #13294d;
+  --head-edge: #4a7fc9;
+  --head-text: #eef4ff;
+  --head-text-dim: #c7d9f2;
+  --head-chip-text: #14294d;
+  --ink: #3d3526;
+  --ink-soft: #7d7256;
+  --ink-faint: #a99d7e;
+  --rule: #e8dcbb;
+  --focus: #0f6cbd;
+
+  --overdue: #d1372f;
+  --critical: #e2721b;
+  --soon: #d9a808;
+  --upcoming: #2f7bbf;
+  --later: #9d9376;
+
+  --chip-bg: rgba(160, 145, 100, 0.16);
+  --tag-group-bg: rgba(47, 123, 191, 0.16);
+  --task-hover: rgba(255, 255, 255, 0.5);
+  --input-bg: #fffdf5;
+  --scrollbar: rgba(120, 100, 50, 0.28);
+  --scrollbar-hover: rgba(120, 100, 50, 0.45);
+  --foot-bg: rgba(240, 228, 190, 0.7);
+
+  --btn-primary-bg: #4a3f22;
+  --btn-primary-bg-hover: #5d5130;
+  --btn-primary-text: #fdf6e3;
+  --btn-ghost-hover: rgba(255, 255, 255, 0.6);
+
+  --danger-text: #8c231d;
+  --danger-bg: rgba(209, 55, 47, 0.1);
+  --danger-border: rgba(209, 55, 47, 0.25);
+  --success-text: #2c6b36;
+  --success-bg: rgba(79, 157, 90, 0.12);
+  --success-border: rgba(79, 157, 90, 0.3);
+  --link-danger: #a3564f;
+
+  --radius: 12px;
+  --pad: 12px;
+}
+
+/* Follows the Windows light/dark setting automatically — main.js pushes
+   nativeTheme.shouldUseDarkColors into state, and app.js stamps it onto
+   <html data-theme>. No manual toggle; it just tracks the OS. */
+:root[data-theme="dark"] {
+  --paper: #1e222a;
+  --paper-edge: #2a2f3a;
+  --head: #0b1930;
+  --head-edge: #2f5a92;
+  --head-text: #eef4ff;
+  --head-text-dim: #b9c9e6;
+  --head-chip-text: #0f2140;
+  --ink: #e9ebf0;
+  --ink-soft: #a8afbd;
+  --ink-faint: #767d8c;
+  --rule: #333947;
+  --focus: #5b9dff;
+
+  --overdue: #ff7166;
+  --critical: #ff9e51;
+  --soon: #e0b93d;
+  --upcoming: #6ba6ff;
+  --later: #8890a0;
+
+  --chip-bg: rgba(255, 255, 255, 0.08);
+  --tag-group-bg: rgba(107, 166, 255, 0.16);
+  --task-hover: rgba(255, 255, 255, 0.05);
+  --input-bg: #262b35;
+  --scrollbar: rgba(255, 255, 255, 0.14);
+  --scrollbar-hover: rgba(255, 255, 255, 0.22);
+  --foot-bg: rgba(255, 255, 255, 0.05);
+
+  --btn-primary-bg: #4d7cc7;
+  --btn-primary-bg-hover: #5f8bd4;
+  --btn-primary-text: #0b1930;
+  --btn-ghost-hover: rgba(255, 255, 255, 0.08);
+
+  --danger-text: #ff8a82;
+  --danger-bg: rgba(255, 113, 102, 0.14);
+  --danger-border: rgba(255, 113, 102, 0.32);
+  --success-text: #7fd08c;
+  --success-bg: rgba(127, 208, 140, 0.14);
+  --success-border: rgba(127, 208, 140, 0.32);
+  --link-danger: #e08b83;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Elements here carry explicit display values (flex/grid), which would
+   otherwise win over the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  font: 13px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+.note {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32), 0 2px 6px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------- header --- */
+
+.note-head {
+  background: linear-gradient(180deg, var(--head), var(--head-edge));
+  border-bottom: 1px solid var(--head-edge);
+  padding: 4px var(--pad) 0;
+  flex: none;
+  -webkit-app-region: drag; /* the whole strip is the drag handle */
+}
+
+.brand-row {
+  text-align: center;
+  padding-bottom: 2px;
+}
+
+.brand {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--head-text-dim);
+  opacity: 0.65;
+}
+
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.head-row.sub {
+  padding-bottom: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.grip {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.55) 1px, transparent 1.2px);
+  background-size: 4px 4px;
+  opacity: 0.8;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: var(--head-text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.head-actions {
+  display: flex;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.icon-btn {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--head-text-dim);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--head-chip-text);
+}
+
+.icon-btn:active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-btn.spinning svg {
+  animation: spin 0.9s linear infinite;
+}
+
+/* The gear icon reads better filled than as thin outline strokes. */
+#settings-btn svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#course-filter {
+  font: inherit;
+  font-size: 11px;
+  color: var(--head-chip-text);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  padding: 2px 4px;
+  max-width: 58%;
+  cursor: pointer;
+}
+
+.credit {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 0.2px;
+  color: var(--head-text-dim);
+  opacity: 0.55;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-group {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.status-time {
+  font-size: 9.5px;
+  color: var(--head-text-dim);
+  opacity: 0.8;
+}
+
+.status-count {
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--head-text);
+}
+
+/* --------------------------------------------------------------- body --- */
+
+.note-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.note-body::-webkit-scrollbar,
+.chat-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.note-body::-webkit-scrollbar-thumb,
+.chat-messages::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 4px;
+}
+
+.note-body::-webkit-scrollbar-thumb:hover,
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
+
+/* --------------------------------------------------------------- list --- */
+
+.tasks {
+  list-style: none;
+}
+
+.task {
+  position: relative;
+  padding: 9px var(--pad) 9px 20px;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+
+.task::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 11px;
+  bottom: 11px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--band, var(--later));
+}
+
+.task:hover {
+  background: var(--task-hover);
+}
+
+.task.overdue {
+  --band: var(--overdue);
+}
+.task.critical {
+  --band: var(--critical);
+}
+.task.soon {
+  --band: var(--soon);
+}
+.task.upcoming {
+  --band: var(--upcoming);
+}
+.task.later {
+  --band: var(--later);
+}
+
+.task-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.course-chip {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: var(--chip-bg);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: none;
+}
+
+.due {
+  font-size: 10px;
+  font-weight: 650;
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--band, var(--later));
+  border: 1px solid var(--band, var(--later));
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.task-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 4px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.task.open .task-title {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+
+/* Points + group/individual — pulled straight from Canvas's own assignment
+   metadata, so this row is accurate even with no AI key configured. */
+.task-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.tag {
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: var(--chip-bg);
+  color: var(--ink-soft);
+}
+
+.tag-group {
+  background: var(--tag-group-bg);
+  color: var(--upcoming);
+}
+
+.tag-individual {
+  color: var(--ink-faint);
+}
+
+.task-summary {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Expanding a card swaps the one-line brief for a bulleted breakdown — the
+   raw original Canvas text is deliberately not shown inline; "Open in
+   Canvas" is the way to see that. */
+.task.open .task-summary {
+  display: none;
+}
+
+.task-detail-list {
+  display: none;
+  margin: 2px 0 0;
+  padding-left: 15px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.task-detail-list li {
+  margin-bottom: 3px;
+}
+
+.task-detail-list li:last-child {
+  margin-bottom: 0;
+}
+
+.task-detail-list strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.task.open .task-detail-list {
+  display: block;
+}
+
+.task-open-link {
+  display: none;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--focus);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.task.open .task-open-link {
+  display: inline-block;
+}
+
+/* --------------------------------------------------------------- chat --- */
+
+/* Unlike the note's other panels, chat needs its own internal split: a
+   scrolling message list with an input bar pinned to the bottom of the
+   popup, rather than the whole thing scrolling inside note-body like
+   Settings does. */
+.chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The floating launcher button, pinned to the note's own bottom-right corner
+   — part of the app's own window, not a separate OS-level widget. Small and
+   translucent by default so it doesn't compete with the task list; growing
+   and going fully opaque on hover (or while the popup is open) is what makes
+   it read as clickable. Placed after .note-foot in the DOM so the sibling
+   selector below can nudge it up out of the footer's way when a notice is
+   showing. */
+.chat-fab {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--head), var(--head-edge));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+  z-index: 20;
+  opacity: 0.55;
+  transform: scale(0.88);
+  transition: opacity 0.15s ease, transform 0.15s ease, filter 0.12s ease, bottom 0.15s ease;
+}
+
+.chat-fab:hover,
+.chat-fab.active {
+  opacity: 1;
+  transform: scale(1);
+  filter: brightness(1.1);
+}
+
+.chat-fab:active {
+  transform: scale(0.92);
+}
+
+.chat-fab svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--head-text);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.note-foot:not([hidden]) ~ .chat-fab {
+  bottom: 46px; /* clears the footer notice bar */
+}
+
+/* The popup itself: a bounded floating panel above the FAB, not a full-view
+   swap — the task list stays visible behind it. */
+.chat-popup {
+  position: fixed;
+  right: 12px;
+  bottom: 56px;
+  width: min(272px, calc(100% - 24px));
+  height: min(360px, calc(100% - 88px));
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  z-index: 19;
+}
+
+.chat-popup-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  background: linear-gradient(180deg, var(--head), var(--head-edge));
+  border-bottom: 1px solid var(--head-edge);
+}
+
+.chat-popup-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--head-text);
+}
+
+.chat-popup-head .icon-btn {
+  color: var(--head-text-dim);
+}
+
+.chat-popup-head .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--head-chip-text);
+}
+
+.note-foot:not([hidden]) ~ .chat-popup {
+  bottom: 90px;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-empty {
+  margin: auto 0;
+  text-align: center;
+  padding: 10px 6px;
+}
+
+.chat-empty-title {
+  font-weight: 650;
+  font-size: 12.5px;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.chat-empty-sub {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+}
+
+.chat-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chip-btn {
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--chip-bg);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.chip-btn:hover {
+  background: var(--task-hover);
+  color: var(--ink);
+}
+
+.chat-msg {
+  max-width: 85%;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.chat-msg.user {
+  align-self: flex-end;
+  background: var(--focus);
+  color: #fff;
+  border-bottom-right-radius: 3px;
+}
+
+.chat-msg.model {
+  align-self: flex-start;
+  background: var(--chip-bg);
+  color: var(--ink);
+  border-bottom-left-radius: 3px;
+}
+
+.chat-msg.pending {
+  opacity: 0.65;
+  font-style: italic;
+}
+
+.chat-msg.error {
+  align-self: flex-start;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
+}
+
+.chat-msg strong {
+  font-weight: 700;
+}
+
+.chat-input-row {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding: 8px var(--pad);
+  border-top: 1px solid var(--rule);
+}
+
+.chat-input-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--ink);
+  user-select: text;
+}
+
+.chat-input-row input:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+
+#chat-send-btn {
+  flex: none;
+  color: var(--ink-soft);
+  background: var(--chip-bg);
+}
+
+#chat-send-btn:hover {
+  background: var(--task-hover);
+  color: var(--ink);
+}
+
+#chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chat-no-key {
+  padding: 34px 20px;
+  text-align: center;
+}
+
+.chat-no-key .chat-empty-sub {
+  margin-bottom: 14px;
+}
+
+/* ------------------------------------------------------- empty / forms --- */
+
+.empty {
+  text-align: center;
+  padding: 46px 20px;
+  color: var(--ink-soft);
+}
+
+.empty-mark {
+  font-size: 30px;
+  color: #4f9d5a;
+  margin-bottom: 6px;
+}
+
+.empty-title {
+  font-weight: 650;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+
+.empty-sub {
+  font-size: 11.5px;
+}
+
+.setup {
+  padding: 14px var(--pad) 18px;
+  user-select: none;
+}
+
+.setup h2 {
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.lede {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+  line-height: 1.45;
+}
+
+.setup label {
+  display: block;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+
+.setup input[type="text"],
+.setup input[type="password"] {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  margin-bottom: 11px;
+  color: var(--ink);
+  background: var(--input-bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  user-select: text;
+}
+
+.setup input:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+
+.check {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  margin: 2px 0 12px;
+  cursor: pointer;
+  font-weight: 500 !important;
+  color: var(--ink) !important;
+}
+
+.check input {
+  cursor: pointer;
+}
+
+.hint {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.divider {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 16px 0 14px;
+}
+
+.badge {
+  font-size: 9.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ink-soft);
+  background: var(--chip-bg);
+  border-radius: 4px;
+  padding: 1px 5px;
+  vertical-align: middle;
+}
+
+.hint strong {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.form-error,
+.form-ok {
+  font-size: 11.5px;
+  line-height: 1.4;
+  border-radius: 6px;
+  padding: 7px 9px;
+  margin-bottom: 11px;
+}
+
+.form-error {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+}
+
+.form-ok {
+  color: var(--success-text);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+button.primary,
+button.ghost {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+button.primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+button.primary:hover {
+  background: var(--btn-primary-bg-hover);
+}
+
+button.primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: var(--rule);
+  color: var(--ink-soft);
+}
+
+button.ghost:hover {
+  background: var(--btn-ghost-hover);
+}
+
+.link-btn {
+  display: block;
+  margin-top: 14px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--link-danger);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------- footer --- */
+
+.note-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px var(--pad);
+  border-top: 1px solid var(--rule);
+  background: var(--foot-bg);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.note-foot.warn {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.foot-msg {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-foot .link-btn {
+  margin: 0;
+  flex: none;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* ------------------------------------------------------- setup guides --- */
+
+.guide {
+  background: var(--chip-bg);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 10px 10px 8px;
+  margin-bottom: 12px;
+}
+
+.guide-title {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.guide-steps {
+  list-style: none;
+  counter-reset: guide-step;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.guide-steps li {
+  counter-increment: guide-step;
+  position: relative;
+  padding-left: 20px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.guide-steps li::before {
+  content: counter(guide-step);
+  position: absolute;
+  left: 0;
+  top: 0.5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--focus);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.guide-steps strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.guide-link {
+  margin-top: 8px;
+  font-weight: 650;
+}

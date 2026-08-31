@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;"
+    />
+    <title>Canvas Sticky</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="note">
+      <header class="note-head">
+        <div class="brand-row" aria-hidden="true">
+          <span class="brand">Canvas Sticky</span>
+        </div>
+
+        <div class="head-row">
+          <span class="grip" aria-hidden="true"></span>
+          <h1 class="title">Due Soon</h1>
+          <div class="head-actions">
+            <button class="icon-btn" id="refresh-btn" title="Refresh (or wait 15 min)" aria-label="Refresh">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 1.5V5H10" />
+              </svg>
+            </button>
+            <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z" />
+              </svg>
+            </button>
+            <button class="icon-btn" id="hide-btn" title="Hide to tray (Ctrl+Shift+C)" aria-label="Hide">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="head-row sub" id="sub-bar">
+          <select id="course-filter" aria-label="Filter by course">
+            <option value="all">All courses</option>
+          </select>
+          <span class="credit">Developed by Jfer Contreras</span>
+          <span class="status-group">
+            <span class="status-time" id="status-time"></span>
+            <span class="status-count" id="status-count"></span>
+          </span>
+        </div>
+      </header>
+
+      <main class="note-body">
+        <!-- First run / no credentials yet -->
+        <section class="view" id="view-setup" hidden>
+          <div class="setup">
+            <h2>Connect to Canvas</h2>
+            <p class="lede">
+              Paste your Canvas address and a personal access token. They stay on this
+              computer, encrypted by Windows.
+            </p>
+
+            <div class="guide">
+              <p class="guide-title">How to get your access token</p>
+              <ol class="guide-steps">
+                <li>Open Canvas → click your name → <strong>Settings</strong></li>
+                <li>Scroll to <strong>Approved Integrations</strong> → <strong>+ New Access Token</strong></li>
+                <li>Copy the token — Canvas shows it only once — then paste it below</li>
+              </ol>
+            </div>
+
+            <label for="setup-url">Canvas address</label>
+            <input id="setup-url" type="text" spellcheck="false" placeholder="e.g. https://ateneo.instructure.com" />
+
+            <label for="setup-token">Access token</label>
+            <input id="setup-token" type="password" spellcheck="false" placeholder="Paste your token" />
+
+            <p class="form-error" id="setup-error" hidden></p>
+            <button class="primary" id="setup-save">Connect</button>
+          </div>
+        </section>
+
+        <!-- The list -->
+        <section class="view" id="view-list" hidden>
+          <ul class="tasks" id="task-list"></ul>
+
+          <div class="empty" id="empty-state" hidden>
+            <p class="empty-mark">✓</p>
+            <p class="empty-title">Nothing due</p>
+            <p class="empty-sub">No unsubmitted work in the next 30 days.</p>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="view" id="view-settings" hidden>
+          <div class="setup">
+            <h2>Settings</h2>
+            <p class="lede" id="account-line"></p>
+
+            <label for="set-url">Canvas address</label>
+            <input id="set-url" type="text" spellcheck="false" placeholder="e.g. https://ateneo.instructure.com" />
+
+            <label for="set-token">Access token</label>
+            <input id="set-token" type="password" spellcheck="false" placeholder="Leave blank to keep current token" />
+            <button class="link-btn" id="get-token-link" type="button">Where do I get a new token?</button>
+
+            <label class="check">
+              <input type="checkbox" id="set-favorites" />
+              <span>Only show favorited courses</span>
+            </label>
+
+            <label class="check">
+              <input type="checkbox" id="set-autostart" />
+              <span>Start with Windows</span>
+            </label>
+
+            <p class="hint" id="encryption-note"></p>
+            <p class="form-error" id="settings-error" hidden></p>
+            <p class="form-ok" id="settings-ok" hidden></p>
+
+            <div class="btn-row">
+              <button class="primary" id="settings-save">Save</button>
+              <button class="ghost" id="settings-back">Back</button>
+            </div>
+            <button class="link-btn" id="sign-out">Remove token from this computer</button>
+
+            <hr class="divider" />
+
+            <h2>AI summaries <span class="badge">optional</span></h2>
+            <p class="lede">
+              Paste a free Gemini API key to get a real one-sentence summary of each
+              assignment instead of the plain text cleanup. Leave this blank and nothing
+              changes.
+            </p>
+
+            <div class="guide">
+              <p class="guide-title">How to get a free Gemini API key</p>
+              <ol class="guide-steps">
+                <li>Open <strong>Google AI Studio</strong> and sign in with any Google account</li>
+                <li>Click <strong>Create API key</strong> — no credit card needed</li>
+                <li>Copy the key and paste it below</li>
+              </ol>
+              <button class="link-btn guide-link" id="gemini-get-key" type="button">Open Google AI Studio →</button>
+            </div>
+
+            <label for="set-gemini-key">Gemini API key</label>
+            <input id="set-gemini-key" type="password" spellcheck="false" placeholder="Paste your Gemini API key" />
+
+            <p class="hint" id="gemini-status"></p>
+            <p class="form-error" id="gemini-error" hidden></p>
+
+            <div class="btn-row">
+              <button class="primary" id="gemini-save">Save key</button>
+            </div>
+            <button class="link-btn" id="gemini-remove" hidden>Remove Gemini key</button>
+          </div>
+        </section>
+      </main>
+
+      <footer class="note-foot" id="foot" hidden>
+        <span class="foot-msg" id="foot-msg"></span>
+        <button class="link-btn" id="foot-action" hidden></button>
+      </footer>
+
+      <button class="chat-fab" id="chat-fab" title="Ask about your Canvas details" aria-label="Chat">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M2 3.5h12v7.5H5.2L2 13.8V3.5z" />
+          <path d="M5 6.2h6M5 8.5h4" />
+        </svg>
+      </button>
+
+      <!-- Chat popup: floats above the note's own corner, doesn't cover the
+           whole window. Placed after .chat-fab so the sibling-selector rules
+           below can bump both up out of the footer's way together. -->
+      <div class="chat-popup" id="chat-popup" hidden>
+        <div class="chat-popup-head">
+          <span class="chat-popup-title">Ask Canvas Sticky</span>
+          <button class="icon-btn" id="chat-popup-close" title="Close" aria-label="Close chat">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" /></svg>
+          </button>
+        </div>
+
+        <div class="chat">
+          <div class="chat-no-key" id="chat-no-key" hidden>
+            <p class="chat-empty-title">Chat needs a Gemini key</p>
+            <p class="chat-empty-sub">Add a free Gemini API key in Settings, then come back here.</p>
+            <button class="primary" id="chat-open-settings">Open Settings</button>
+          </div>
+
+          <div class="chat-messages" id="chat-messages">
+            <div class="chat-empty" id="chat-empty">
+              <p class="chat-empty-title">Ask about your Canvas details</p>
+              <p class="chat-empty-sub">Answers come from the courses, tasks, and grades already loaded — nothing is sent anywhere new.</p>
+              <div class="chat-suggestions">
+                <button class="chip-btn" data-prompt="What's due this week?">What's due this week?</button>
+                <button class="chip-btn" data-prompt="Do I have any group work coming up?">Any group work coming up?</button>
+                <button class="chip-btn" data-prompt="What are my current grades?">What are my current grades?</button>
+              </div>
+            </div>
+          </div>
+
+          <form class="chat-input-row" id="chat-form">
+            <input id="chat-input" type="text" placeholder="Ask a question…" autocomplete="off" maxlength="500" />
+            <button class="icon-btn" id="chat-send-btn" type="submit" title="Send" aria-label="Send">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4" /></svg>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

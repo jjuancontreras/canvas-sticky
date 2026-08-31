@@ -1,0 +1,15 @@
+{
+  "name": "canvas-sticky",
+  "version": "1.0.0",
+  "description": "A desktop sticky note that shows your Canvas LMS assignments, sorted by nearest due date.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "keywords": ["canvas", "lms", "sticky-note", "electron"],
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}
