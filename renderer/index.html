@@ -13,25 +13,48 @@
     <div class="note">
       <header class="note-head">
         <div class="brand-row" aria-hidden="true">
-          <span class="brand">Canvas Sticky</span>
+          <div class="brand-line">
+            <button class="icon-btn brand-slot-left" id="refresh-btn" title="Refresh (or wait 15 min)" aria-label="Refresh">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 1.5V5H10" />
+              </svg>
+            </button>
+            <span class="brand brand-slot-center">Canvas Sticky</span>
+            <div class="win-actions brand-slot-right">
+              <button class="icon-btn win-btn" id="win-minimize" title="Minimize" aria-label="Minimize">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 12h9" /></svg>
+              </button>
+              <button class="icon-btn win-btn" id="win-maximize" title="Maximize" aria-label="Maximize">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1" /></svg>
+              </button>
+              <button class="icon-btn win-btn" id="win-close" title="Hide to tray (Ctrl+Shift+C)" aria-label="Close">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" /></svg>
+              </button>
+            </div>
+          </div>
+          <div class="brand-line">
+            <span class="status-time brand-slot-left" id="status-time"></span>
+            <span class="brand-credit brand-slot-center">By Jfer Contreras</span>
+          </div>
         </div>
 
         <div class="head-row">
-          <span class="grip" aria-hidden="true"></span>
           <h1 class="title">Due Soon</h1>
+
           <div class="head-actions">
-            <button class="icon-btn" id="refresh-btn" title="Refresh (or wait 15 min)" aria-label="Refresh">
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 1.5V5H10" />
+            <button class="icon-btn" id="theme-toggle" title="Switch to dark mode" aria-label="Toggle light/dark mode">
+              <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="8" r="3" />
+                <path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M3.3 12.7l1.1-1.1M11.6 4.4l1.1-1.1" />
+              </svg>
+              <svg class="icon-moon" viewBox="0 0 16 16" aria-hidden="true" hidden>
+                <path d="M13.2 9.7A5.8 5.8 0 1 1 6.3 2.8a4.6 4.6 0 0 0 6.9 6.9z" />
               </svg>
             </button>
             <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z" />
               </svg>
-            </button>
-            <button class="icon-btn" id="hide-btn" title="Hide to tray (Ctrl+Shift+C)" aria-label="Hide">
-              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg>
             </button>
           </div>
         </div>
@@ -40,10 +63,9 @@
           <select id="course-filter" aria-label="Filter by course">
             <option value="all">All courses</option>
           </select>
-          <span class="credit">Developed by Jfer Contreras</span>
-          <span class="status-group">
-            <span class="status-time" id="status-time"></span>
-            <span class="status-count" id="status-count"></span>
+          <span class="status-count" id="status-count">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8.5l3 3 7-7" /></svg>
+            <span id="status-count-text"></span>
           </span>
         </div>
       </header>
@@ -173,9 +195,14 @@
       <div class="chat-popup" id="chat-popup" hidden>
         <div class="chat-popup-head">
           <span class="chat-popup-title">Ask Canvas Sticky</span>
-          <button class="icon-btn" id="chat-popup-close" title="Close" aria-label="Close chat">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" /></svg>
-          </button>
+          <div class="chat-popup-actions">
+            <div class="usage-ring" id="chat-usage" title="Gemini usage today">
+              <span id="chat-usage-pct">0%</span>
+            </div>
+            <button class="icon-btn" id="chat-popup-close" title="Close" aria-label="Close chat">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" /></svg>
+            </button>
+          </div>
         </div>
 
         <div class="chat">

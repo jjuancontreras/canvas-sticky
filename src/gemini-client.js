@@ -13,6 +13,8 @@
  * reaches the renderer.
  */
 
+const store = require('./store');
+
 const MODEL = 'gemini-3.5-flash-lite';
 const ENDPOINT = (apiKey) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -20,7 +22,33 @@ const ENDPOINT = (apiKey) =>
 const REQUEST_TIMEOUT_MS = 20000;
 const MIN_GAP_MS = 4200; // shared throttle, keeps combined usage under ~15 req/min
 
+// Google doesn't hand back "quota remaining" on these responses, so the usage
+// ring in the chat popup is an estimate against the published free-tier daily
+// cap for this model family, tracked locally and reset at midnight — not a
+// number read from Gemini itself.
+const DAILY_LIMIT = 1000;
+
 let lastCallAt = 0;
+
+const todayKey = () => new Date().toISOString().slice(0, 10);
+
+/** Bumps today's local call counter by one and persists it. */
+const recordUsage = () => {
+  const config = store.loadConfig();
+  const today = todayKey();
+  const current = config.geminiUsage && config.geminiUsage.date === today ? config.geminiUsage.count : 0;
+  const usage = { date: today, count: current + 1 };
+  store.saveConfig({ geminiUsage: usage });
+  return usage;
+};
+
+/** @returns {{used: number, limit: number}} today's estimated usage, resetting at midnight. */
+const getUsage = () => {
+  const config = store.loadConfig();
+  const today = todayKey();
+  const used = config.geminiUsage && config.geminiUsage.date === today ? config.geminiUsage.count : 0;
+  return { used, limit: DAILY_LIMIT };
+};
 
 class GeminiError extends Error {
   constructor(message, { code = 'unknown', status = 0 } = {}) {
@@ -68,6 +96,11 @@ const callGemini = async (apiKey, { contents, systemInstruction, generationConfi
     });
   }
 
+  // Counted here, not just on success — any response that actually reached
+  // Google (including a 4xx/5xx) consumed a request against the quota.
+  // Requests that never left the machine (network error/timeout above) don't.
+  recordUsage();
+
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const detail = body?.error?.message || '';
@@ -86,4 +119,4 @@ const extractText = (data) => {
   return text.trim();
 };
 
-module.exports = { callGemini, extractText, GeminiError, MODEL };
+module.exports = { callGemini, extractText, GeminiError, MODEL, getUsage, DAILY_LIMIT };

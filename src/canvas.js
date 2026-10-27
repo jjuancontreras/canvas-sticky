@@ -8,9 +8,13 @@
  * and keeping it here means the access token never enters the page context.
  */
 
+const { htmlToTextPreservingLinks, truncate } = require('./summarize');
+
 const REQUEST_TIMEOUT_MS = 20000;
 const MAX_PAGES = 10;
 const USER_AGENT = 'CanvasSticky/1.0';
+const ANNOUNCEMENT_MAX_CHARS = 400;
+const ANNOUNCEMENT_LOOKBACK_DAYS = 21;
 
 class CanvasError extends Error {
   constructor(message, { code = 'unknown', status = 0 } = {}) {
@@ -150,6 +154,10 @@ const shapeCourses = (raw) =>
       id: String(course.id),
       name: course.name || 'Untitled course',
       code: (course.course_code || course.name || '').trim() || 'Course',
+      // The banner image a student (or their institution) set for the course
+      // card on the Canvas dashboard — used as a faint background on task
+      // cards. Null for courses with no image, which is common.
+      imageUrl: course.image_download_url || null,
     }));
 
 const fetchCourseList = (baseUrl, token, endpoint) =>
@@ -157,10 +165,50 @@ const fetchCourseList = (baseUrl, token, endpoint) =>
     buildUrl(baseUrl, endpoint, {
       enrollment_state: 'active',
       'state[]': 'available',
+      'include[]': 'course_image',
       per_page: '100',
     }),
     token,
   );
+
+/**
+ * Downloads a course's banner image and inlines it as a data: URL, capped at
+ * a modest size. Runs in the main process, same as every other Canvas call —
+ * the renderer never fetches a remote URL itself. Failures (network, size
+ * cap, non-image response) just mean that course's task cards render with no
+ * background image; never worth failing a whole refresh over.
+ */
+const IMAGE_MAX_BYTES = 400 * 1024;
+
+const fetchCourseImageDataUrl = async (imageUrl, token) => {
+  let response;
+  try {
+    response = await fetch(imageUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    return null;
+  }
+
+  if (!response.ok) return null;
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.startsWith('image/')) return null;
+
+  const contentLength = Number(response.headers.get('content-length') || 0);
+  if (contentLength > IMAGE_MAX_BYTES) return null;
+
+  let buffer;
+  try {
+    buffer = Buffer.from(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
+  if (buffer.length > IMAGE_MAX_BYTES) return null;
+
+  return `data:${contentType};base64,${buffer.toString('base64')}`;
+};
 
 /**
  * Active courses, favorited-only by default.
@@ -185,6 +233,26 @@ const getCourses = async (baseUrl, token, { favoritesOnly = true } = {}) => {
 
   const all = shapeCourses(await fetchCourseList(baseUrl, token, '/courses'));
   return { courses: all, usedFallback: true };
+};
+
+/**
+ * The color you (or Canvas's own default palette) assigned each course on
+ * your dashboard — the same colors Canvas's calendar and sidebar use.
+ * `/users/self/colors` returns every colored "asset" you have (courses,
+ * groups, your own user id); only the `course_<id>` keys are relevant here.
+ *
+ * @returns {Promise<Record<string, string>>} courseId -> hex color
+ */
+const getCourseColors = async (baseUrl, token) => {
+  const { data } = await request(buildUrl(baseUrl, '/users/self/colors'), token);
+  const raw = data && typeof data.custom_colors === 'object' ? data.custom_colors : {};
+
+  const colors = {};
+  for (const [key, hex] of Object.entries(raw)) {
+    const match = /^course_(\d+)$/.exec(key);
+    if (match && typeof hex === 'string' && /^#[0-9a-f]{3,8}$/i.test(hex)) colors[match[1]] = hex;
+  }
+  return colors;
 };
 
 /**
@@ -226,7 +294,10 @@ const getCourseAssignments = async (baseUrl, token, courseId) => {
     requestAll(
       buildUrl(baseUrl, `/courses/${courseId}/assignments`, {
         bucket,
-        'include[]': 'submission',
+        // submission_comments rides along on the same call — this is how
+        // instructor feedback reaches the chatbot without a second request
+        // per assignment.
+        'include[]': ['submission', 'submission_comments'],
         order_by: 'due_at',
         per_page: '100',
       }),
@@ -250,6 +321,77 @@ const getCourseAssignments = async (baseUrl, token, courseId) => {
   return [...byId.values()];
 };
 
+/**
+ * Course modules (the ordered content outline: readings, pages, files,
+ * sub-assignments). Shaped down to just the fields the chatbot prompt can
+ * use before it ever leaves this file — raw Canvas module-item objects carry
+ * a lot of fields (internal ids, publish/completion metadata) with no use
+ * here. `url` is kept specifically so the chatbot can hand back a direct
+ * link to a module item (e.g. "here's the class modality page").
+ */
+const shapeModules = (raw) =>
+  raw
+    .filter((m) => m && m.published !== false)
+    .map((m) => ({
+      id: String(m.id),
+      name: m.name || 'Untitled module',
+      items: (Array.isArray(m.items) ? m.items : [])
+        .filter((item) => item && item.published !== false && item.title)
+        .slice(0, 15)
+        .map((item) => ({
+          title: item.title,
+          type: item.type || 'Item',
+          url: item.html_url || item.external_url || null,
+        })),
+    }));
+
+const getModules = async (baseUrl, token, courseId) => {
+  const raw = await requestAll(
+    buildUrl(baseUrl, `/courses/${courseId}/modules`, { 'include[]': 'items', per_page: '50' }),
+    token,
+  );
+  return shapeModules(raw);
+};
+
+/**
+ * Recent announcements across every course in scope, in one call — Canvas's
+ * `/announcements` endpoint takes a list of `context_codes[]` rather than
+ * needing one request per course. Bounded to the last three weeks so an old
+ * course with years of announcements doesn't balloon the chatbot's context.
+ *
+ * `summary` keeps any hyperlinks in the announcement body (a Zoom/Meet link,
+ * a syllabus link, etc.) as plain "label (url)" text — see
+ * htmlToTextPreservingLinks — and `url` is the announcement's own Canvas
+ * page, so the chatbot always has a link to fall back on even when the body
+ * itself has none.
+ */
+const shapeAnnouncements = (raw) =>
+  raw
+    .filter((a) => a && a.title)
+    .map((a) => ({
+      id: String(a.id),
+      courseId: a.context_code ? String(a.context_code).replace(/^course_/, '') : '',
+      title: a.title,
+      postedAt: a.posted_at || a.created_at || null,
+      summary: truncate(htmlToTextPreservingLinks(a.message), ANNOUNCEMENT_MAX_CHARS),
+      url: a.html_url || null,
+    }));
+
+const getAnnouncements = async (baseUrl, token, courseIds) => {
+  if (!Array.isArray(courseIds) || courseIds.length === 0) return [];
+
+  const since = new Date(Date.now() - ANNOUNCEMENT_LOOKBACK_DAYS * 86400000).toISOString();
+  const raw = await requestAll(
+    buildUrl(baseUrl, '/announcements', {
+      'context_codes[]': courseIds.map((id) => `course_${id}`),
+      start_date: since,
+      per_page: '30',
+    }),
+    token,
+  );
+  return shapeAnnouncements(raw);
+};
+
 module.exports = {
   CanvasError,
   normalizeBaseUrl,
@@ -258,5 +400,9 @@ module.exports = {
   getCourses,
   getCourseAssignments,
   getGrades,
+  getCourseColors,
+  getModules,
+  getAnnouncements,
+  fetchCourseImageDataUrl,
   buildUrl,
 };

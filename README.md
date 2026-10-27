@@ -49,13 +49,15 @@ To remove it: **Settings → Remove token from this computer**, which deletes th
 
 | Action | How |
 |---|---|
-| Move it | Drag the yellow header strip |
-| Resize | Drag any edge |
-| Show / hide | `Ctrl+Shift+C`, or click the tray icon |
-| Hide | The `—` button, or `Esc` |
+| Move it | Drag the header strip |
+| Resize | Drag any edge, or the ▢ button to maximize/restore |
+| Show / hide | `Ctrl+Shift+C`, click the tray icon, or the ✕ button |
+| Minimize | The `–` button |
 | Refresh | The ↻ button, `F5`, or the tray menu (it also auto-refreshes every 15 minutes) |
 | Expand a task | Click it — shows the full description and an **Open in Canvas** link |
 | Filter to one course | The dropdown in the header |
+| Switch light/dark mode | The sun/moon button (otherwise it just follows the Windows setting) |
+| Ask the chat about your courses | The chat bubble, bottom-right of the note |
 | Quit properly | Right-click the tray icon → **Quit Canvas Sticky** |
 
 Closing the window hides it to the tray rather than quitting, so it stays out of your way but is one keystroke away.
@@ -69,6 +71,16 @@ Canvas is asked for each course's `upcoming` and `overdue` assignment buckets. B
 An item is shown when it is published, not yet submitted (Canvas's own submission record decides this), and due between 14 days ago and 30 days from now. Undated work is kept but sorts to the bottom.
 
 Colour bands: **red** overdue · **orange** under 24h · **amber** under 3 days · **blue** under a week · **grey** beyond.
+
+## AI summaries and chat (optional, off by default)
+
+Paste a free Gemini API key in Settings to turn on two things: an AI-written brief/detail breakdown for each task, and an in-note chat you can ask about your courses.
+
+**What the chat can see:** your courses, current grades, pending tasks (with any instructor feedback comments), course modules (the content outline), and announcements from the last three weeks — all data Canvas Sticky already has cached from your own token.
+
+**Where that data goes:** to Google's Gemini API, over **your own key**, and nowhere else. There is no backend server for this app — the only two things it ever talks to over the network are your Canvas instance and, if you've added a key, Gemini. Nothing is logged, sent to any third analytics service, or written to disk beyond the local task cache in `%APPDATA%\canvas-sticky`. Chat conversation history specifically is never written to disk at all — it lives only in memory for as long as the note stays open, and is cleared every time the note is shown (a fresh launch or un-hiding from the tray).
+
+The small ring in the chat popup's header is an estimate of today's Gemini usage against that model's published free-tier daily limit — tracked locally, since Google's API doesn't report quota remaining.
 
 ## If something goes wrong
 

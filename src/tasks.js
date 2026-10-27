@@ -47,6 +47,23 @@ const isRelevant = (assignment, now) => {
   return true;
 };
 
+/**
+ * The most recent instructor comment on the student's own submission, if any
+ * — Canvas returns these inline on the assignment when the call includes
+ * `submission_comments`, so this costs no extra request. Kept as plain text
+ * only, used as chatbot context; never rendered as HTML.
+ */
+const latestFeedback = (assignment) => {
+  const comments = assignment.submission?.submission_comments;
+  if (!Array.isArray(comments) || comments.length === 0) return null;
+
+  const last = comments[comments.length - 1];
+  const text = typeof last?.comment === 'string' ? last.comment.trim() : '';
+  if (!text) return null;
+
+  return { author: last.author_name || 'Instructor', text };
+};
+
 const shapeTask = (assignment, course) => {
   const { summary, detail, fullText } = summarize(assignment);
 
@@ -67,6 +84,8 @@ const shapeTask = (assignment, course) => {
     summary, // one-line brief, shown on the collapsed card
     detail, // bullet breakdown, shown when the card is expanded
     fullText, // cleaned full text — never rendered, only fed to the AI prompt
+    score: typeof assignment.submission?.score === 'number' ? assignment.submission.score : null,
+    feedback: latestFeedback(assignment), // chatbot context only, not shown on the card
   };
 };
 

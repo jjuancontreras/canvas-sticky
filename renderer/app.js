@@ -28,9 +28,15 @@ const els = {
   courseFilter: $('course-filter'),
   statusTime: $('status-time'),
   statusCount: $('status-count'),
+  statusCountText: $('status-count-text'),
   refreshBtn: $('refresh-btn'),
   settingsBtn: $('settings-btn'),
-  hideBtn: $('hide-btn'),
+  winClose: $('win-close'),
+  winMinimize: $('win-minimize'),
+  winMaximize: $('win-maximize'),
+  themeToggle: $('theme-toggle'),
+  chatUsage: $('chat-usage'),
+  chatUsagePct: $('chat-usage-pct'),
   chatFab: $('chat-fab'),
   chatPopup: $('chat-popup'),
   chatPopupClose: $('chat-popup-close'),
@@ -161,22 +167,57 @@ const el = (tag, className, text) => {
   return node;
 };
 
+// Matches a bare http(s) URL, stopping short of trailing punctuation/closing
+// brackets so "(https://zoom.us/j/123)" links correctly rather than eating
+// the closing paren, and a URL at the end of a sentence doesn't swallow the
+// period.
+const URL_RE = /https?:\/\/[^\s<>"')\]]+[^\s<>"')\].,!?]/g;
+
 /**
- * Appends `text` to `container`, splitting only on **bold** markers — the one
- * bit of formatting the AI breakdown is allowed to use. Every piece still
- * goes in via textContent/createTextNode, never innerHTML, so even if a
- * description (or a prompt-injection attempt inside one) produced literal
- * "<tags>" they would render as inert text, not markup.
+ * Appends `text` to `container`, turning any bare URL into a real, clickable
+ * link. Still never touches innerHTML — the link is a genuine <a> element
+ * built via createElement/textContent, and clicking it is routed through
+ * `window.api.openExternal` (same as every other external link in this app)
+ * rather than letting the note's own window navigate.
+ */
+const appendWithLinks = (container, text) => {
+  let lastIndex = 0;
+  for (const match of text.matchAll(URL_RE)) {
+    const url = match[0];
+    if (match.index > lastIndex) container.append(document.createTextNode(text.slice(lastIndex, match.index)));
+
+    const link = document.createElement('a');
+    link.href = '#';
+    link.className = 'chat-link';
+    link.textContent = url;
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      window.api.openExternal(url);
+    });
+    container.append(link);
+
+    lastIndex = match.index + url.length;
+  }
+  if (lastIndex < text.length) container.append(document.createTextNode(text.slice(lastIndex)));
+};
+
+/**
+ * Appends `text` to `container`, splitting on **bold** markers — the one bit
+ * of formatting the AI breakdown is allowed to use — and turning any bare URL
+ * (inside or outside a bold span) into a clickable link. Every piece still
+ * goes in via textContent/createTextNode/createElement, never innerHTML, so
+ * even if a description (or a prompt-injection attempt inside one) produced
+ * literal "<tags>" they would render as inert text, not markup.
  */
 const appendWithBold = (container, text) => {
   for (const part of text.split(/(\*\*[^*]+\*\*)/g)) {
     if (!part) continue;
     if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) {
       const strong = document.createElement('strong');
-      strong.textContent = part.slice(2, -2);
+      appendWithLinks(strong, part.slice(2, -2));
       container.append(strong);
     } else {
-      container.append(document.createTextNode(part));
+      appendWithLinks(container, part);
     }
   }
 };
@@ -204,11 +245,15 @@ const buildTaskNode = (task) => {
   const li = el('li', `task ${urgency}${isOpen ? ' open' : ''}`);
   li.dataset.id = task.id;
 
+  const courseColor = state.courseColors && state.courseColors[task.courseId];
+  const chip = el('span', 'course-chip', task.courseCode);
+  if (courseColor) {
+    chip.classList.add('has-color');
+    chip.style.setProperty('--course-color', courseColor);
+  }
+
   const top = el('div', 'task-top');
-  top.append(
-    el('span', 'course-chip', task.courseCode),
-    el('span', 'due', dueLabel(task.dueAt)),
-  );
+  top.append(chip, el('span', 'due', dueLabel(task.dueAt)));
 
   const title = el('p', 'task-title', task.title);
 
@@ -220,9 +265,22 @@ const buildTaskNode = (task) => {
     el('span', task.isGroupWork ? 'tag tag-group' : 'tag tag-individual', task.isGroupWork ? 'Group' : 'Individual'),
   );
 
+  // The course's own Canvas banner image, very faint, behind just this
+  // header block (chip/due/title/tags) — it deliberately stops here rather
+  // than covering the whole card, so it never runs behind the description
+  // text below. A data: URL supplied by main.js (it downloaded the image;
+  // the renderer never fetches a remote URL itself).
+  const banner = el('div', 'task-banner');
+  banner.append(top, title, tags);
+  const courseImage = state.courseImages && state.courseImages[task.courseId];
+  if (courseImage) {
+    banner.classList.add('has-course-bg');
+    banner.style.setProperty('--course-bg', `url("${courseImage}")`);
+  }
+
   const summary = el('p', 'task-summary', task.summary);
 
-  li.append(top, title, tags, summary, buildDetailList(task.detail));
+  li.append(banner, summary, buildDetailList(task.detail));
 
   if (task.url) {
     const link = el('button', 'task-open-link', 'Open in Canvas');
@@ -327,9 +385,15 @@ const renderFooter = () => {
 const render = () => {
   if (!state) return;
 
-  // Follows the Windows light/dark setting live; main.js pushes updates
-  // through the same state channel as everything else, no separate wiring.
+  // Follows the Windows light/dark setting live unless the user has clicked
+  // the toggle; either way main.js pushes the result through this same state
+  // channel, so there's nothing extra to wire up here.
   document.documentElement.dataset.theme = state.isDarkMode ? 'dark' : 'light';
+  els.themeToggle.querySelector('.icon-sun').hidden = state.isDarkMode;
+  els.themeToggle.querySelector('.icon-moon').hidden = !state.isDarkMode;
+  els.themeToggle.title = state.isDarkMode ? 'Switch to light mode' : 'Switch to dark mode';
+
+  renderChatUsage();
 
   els.refreshBtn.classList.toggle('spinning', Boolean(state.loading));
 
@@ -355,10 +419,11 @@ const render = () => {
 
   if (state.loading) {
     els.statusTime.textContent = 'refreshing…';
-    els.statusCount.textContent = '';
+    els.statusCount.hidden = true;
   } else {
     els.statusTime.textContent = relativeTime(state.fetchedAt);
-    els.statusCount.textContent = `${tasks.length} due`;
+    els.statusCount.hidden = false;
+    els.statusCountText.textContent = `${tasks.length} due`;
   }
 
   renderFooter();
@@ -383,6 +448,21 @@ const setView = (view) => {
   // Closing off the list view also closes the popup — there's nothing behind
   // it to chat about from Settings or the first-run screen.
   if (view !== 'list') showingChat = false;
+};
+
+/**
+ * Today's estimated Gemini usage, drawn as a small donut in the chat popup
+ * header. This is a local count against the model's published free-tier
+ * daily limit (see gemini-client.js) — Google's API doesn't hand back actual
+ * quota remaining, so treat the percentage as an estimate, not a hard number.
+ */
+const renderChatUsage = () => {
+  if (!els.chatUsage || !state.geminiUsage) return;
+  const { used, limit } = state.geminiUsage;
+  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  els.chatUsage.style.setProperty('--pct', `${pct}%`);
+  els.chatUsagePct.textContent = `${pct}%`;
+  els.chatUsage.title = `~${used} / ${limit} Gemini requests used today (estimate, resets daily)`;
 };
 
 /** Shows/hides the floating chat popup without touching the underlying view. */
@@ -587,7 +667,12 @@ const submitChatMessage = async (rawText) => {
 /* --------------------------------------------------------------- wiring -- */
 
 els.refreshBtn.addEventListener('click', () => window.api.refresh());
-els.hideBtn.addEventListener('click', () => window.api.hideWindow());
+els.winClose.addEventListener('click', () => window.api.hideWindow());
+els.winMinimize.addEventListener('click', () => window.api.minimizeWindow());
+els.winMaximize.addEventListener('click', () => window.api.toggleMaximize());
+els.themeToggle.addEventListener('click', () => {
+  window.api.setThemeOverride(state && state.isDarkMode ? 'light' : 'dark');
+});
 
 els.settingsBtn.addEventListener('click', () => {
   if (showingSettings) {

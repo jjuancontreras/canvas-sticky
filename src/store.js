@@ -28,6 +28,8 @@ const DEFAULT_CONFIG = Object.freeze({
   favoritesOnly: true,
   encryptedGeminiKey: null,
   geminiKeyIsPlaintext: false,
+  geminiUsage: null, // { date: 'YYYY-MM-DD', count } — local estimate only, see gemini-client.js
+  themeOverride: null, // 'light' | 'dark' | null (null = follow the OS setting)
 });
 
 const readJson = (file, fallback) => {
@@ -102,7 +104,15 @@ const hasGeminiKey = () => Boolean(loadConfig().encryptedGeminiKey);
 
 const isEncryptionAvailable = () => safeStorage.isEncryptionAvailable();
 
-const loadCache = () => readJson(CACHE_FILE, { tasks: [], courses: [], grades: {}, fetchedAt: null });
+const loadCache = () =>
+  readJson(CACHE_FILE, {
+    tasks: [], courses: [], grades: {}, modules: [], announcements: [],
+    // { [courseId]: { url, dataUrl } } — the source url is kept alongside the
+    // inlined image so a refresh only re-downloads a course's banner when
+    // Canvas actually changes it, not on every 15-minute poll.
+    courseImages: {},
+    fetchedAt: null,
+  });
 
 const saveCache = (payload) => writeJson(CACHE_FILE, payload);
 
@@ -114,7 +124,8 @@ const saveAiCache = (payload) => writeJson(AI_CACHE_FILE, payload);
 /** Removes Canvas credentials only — window position, Gemini key, and other prefs are untouched. */
 const clearCanvasCredentials = () => {
   saveConfig({ baseUrl: '', encryptedToken: null, tokenIsPlaintext: false, userName: '' });
-  saveCache({ tasks: [], courses: [], grades: {}, fetchedAt: null }); // stale data from the old account
+  // stale data from the old account
+  saveCache({ tasks: [], courses: [], grades: {}, modules: [], announcements: [], courseImages: {}, fetchedAt: null });
 };
 
 const clearGeminiKey = () => saveConfig({ encryptedGeminiKey: null, geminiKeyIsPlaintext: false });

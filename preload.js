@@ -29,7 +29,12 @@ contextBridge.exposeInMainWorld('api', {
 
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   hideWindow: () => ipcRenderer.send('hide-window'),
+  minimizeWindow: () => ipcRenderer.send('minimize-window'),
+  toggleMaximize: () => ipcRenderer.send('toggle-maximize'),
   quit: () => ipcRenderer.send('quit-app'),
+
+  // null goes back to following the OS light/dark setting.
+  setThemeOverride: (mode) => ipcRenderer.invoke('set-theme-override', mode),
 
   onState: (callback) => {
     const handler = (_event, state) => callback(state);

@@ -10,6 +10,7 @@ const canvas = require('./src/canvas');
 const { buildTaskList } = require('./src/tasks');
 const { applyAiSummaries } = require('./src/ai-summarize');
 const { sendChatMessage } = require('./src/chat');
+const { getUsage } = require('./src/gemini-client');
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const TOGGLE_SHORTCUT = 'CommandOrControl+Shift+C';
@@ -20,6 +21,9 @@ let mainWindow = null;
 let tray = null;
 let refreshTimer = null;
 let isQuitting = false;
+/** 'light' | 'dark' | null — null means "follow the OS setting" (the default until the user clicks the toggle). */
+let themeOverride = null;
+const computeIsDark = () => (themeOverride ? themeOverride === 'dark' : nativeTheme.shouldUseDarkColors);
 
 /** Everything the renderer is allowed to know. Note: never the token itself. */
 let state = {
@@ -35,9 +39,15 @@ let state = {
   hasGeminiKey: false,
   aiError: null,
   isDarkMode: nativeTheme.shouldUseDarkColors,
+  themeOverride: null,
   tasks: [],
   courses: [],
   grades: {},
+  modules: [],
+  announcements: [],
+  courseImages: {},
+  courseColors: {},
+  geminiUsage: { used: 0, limit: 1000 },
   fetchedAt: null,
   loading: false,
   error: null,
@@ -58,6 +68,8 @@ const hydrateFromDisk = () => {
   const config = store.loadConfig();
   const cache = store.loadCache();
 
+  themeOverride = config.themeOverride === 'dark' || config.themeOverride === 'light' ? config.themeOverride : null;
+
   state = {
     ...state,
     configured: Boolean(config.baseUrl && store.hasToken()),
@@ -69,9 +81,17 @@ const hydrateFromDisk = () => {
     courseFilter: config.courseFilter || 'all',
     favoritesOnly: config.favoritesOnly !== false,
     hasGeminiKey: store.hasGeminiKey(),
+    isDarkMode: computeIsDark(),
+    themeOverride,
     tasks: cache.tasks || [],
     courses: cache.courses || [],
     grades: cache.grades || {},
+    modules: cache.modules || [],
+    announcements: cache.announcements || [],
+    courseImages: Object.fromEntries(
+      Object.entries(cache.courseImages || {}).map(([id, entry]) => [id, entry.dataUrl]),
+    ),
+    geminiUsage: getUsage(),
     fetchedAt: cache.fetchedAt || null,
   };
 };
@@ -95,9 +115,13 @@ const refresh = async () => {
 
   try {
     const baseUrl = canvas.normalizeBaseUrl(config.baseUrl);
-    const { courses, usedFallback } = await canvas.getCourses(baseUrl, token, {
-      favoritesOnly: config.favoritesOnly !== false,
-    });
+    const [{ courses, usedFallback }, courseColors] = await Promise.all([
+      canvas.getCourses(baseUrl, token, { favoritesOnly: config.favoritesOnly !== false }),
+      canvas.getCourseColors(baseUrl, token).catch((error) => {
+        console.warn('Course colors fetch failed, continuing without them:', error.message);
+        return state.courseColors;
+      }),
+    ]);
 
     const groups = await Promise.all(
       courses.map(async (course) => ({
@@ -106,13 +130,48 @@ const refresh = async () => {
       })),
     );
 
-    // Grades are only used as chatbot context, not shown in the task list —
-    // a hiccup here (an institution that restricts the enrollments endpoint,
-    // a course with no posted grade) should never take down the whole refresh.
+    // Grades, modules, and announcements are only ever used as chatbot
+    // context — never shown in the task list — so a hiccup fetching any of
+    // them (an institution that restricts an endpoint, a course with nothing
+    // posted) should never take down the whole refresh.
     const grades = await canvas.getGrades(baseUrl, token).catch((error) => {
       console.warn('Grades fetch failed, continuing without them:', error.message);
       return state.grades; // keep whatever we had rather than blanking it
     });
+
+    const moduleGroups = await Promise.all(
+      courses.map(async (course) => {
+        const mods = await canvas.getModules(baseUrl, token, course.id).catch(() => []);
+        return mods.map((m) => ({ ...m, courseId: course.id }));
+      }),
+    );
+    const modules = moduleGroups.flat();
+
+    const announcements = await canvas
+      .getAnnouncements(baseUrl, token, courses.map((c) => c.id))
+      .catch((error) => {
+        console.warn('Announcements fetch failed, continuing without them:', error.message);
+        return [];
+      });
+
+    // Course banner images, used as a faint background on task cards. Cached
+    // by course id + source url so an unchanged course never re-downloads
+    // its image on every 15-minute poll — only a genuinely new/changed
+    // banner costs a request.
+    const priorImageCache = store.loadCache().courseImages || {};
+    const courseImageCache = {};
+    await Promise.all(
+      courses.map(async (course) => {
+        if (!course.imageUrl) return;
+        const cached = priorImageCache[course.id];
+        if (cached && cached.url === course.imageUrl) {
+          courseImageCache[course.id] = cached;
+          return;
+        }
+        const dataUrl = await canvas.fetchCourseImageDataUrl(course.imageUrl, token).catch(() => null);
+        if (dataUrl) courseImageCache[course.id] = { url: course.imageUrl, dataUrl };
+      }),
+    );
 
     let tasks = buildTaskList(groups);
     let aiError = null;
@@ -127,17 +186,22 @@ const refresh = async () => {
 
     const fetchedAt = new Date().toISOString();
 
-    store.saveCache({ tasks, courses, grades, fetchedAt });
+    store.saveCache({ tasks, courses, grades, modules, announcements, courseImages: courseImageCache, fetchedAt });
     setState({
       tasks,
       courses,
       grades,
+      modules,
+      announcements,
+      courseImages: Object.fromEntries(Object.entries(courseImageCache).map(([id, entry]) => [id, entry.dataUrl])),
+      courseColors,
       fetchedAt,
       loading: false,
       error: null,
       usedFavoritesFallback: usedFallback,
       hasGeminiKey: Boolean(geminiKey),
       aiError,
+      geminiUsage: getUsage(),
     });
     updateTrayTooltip(tasks.length);
   } catch (error) {
@@ -205,8 +269,13 @@ const createWindow = () => {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
+    // Windows 11 applies its own automatic corner rounding to app windows;
+    // left on, it fights with the CSS border-radius on .note and shows as a
+    // dark sliver at the corners where the two roundings don't quite agree.
+    // Electron's `.note` shape is the only rounding this window should have.
+    roundedCorners: false,
     resizable: true,
-    maximizable: false,
+    maximizable: true,
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
@@ -384,12 +453,20 @@ ipcMain.handle('chat-send', async (_event, payload = {}) => {
   try {
     const reply = await sendChatMessage(
       geminiKey,
-      { tasks: state.tasks, courses: state.courses, grades: state.grades },
+      {
+        tasks: state.tasks,
+        courses: state.courses,
+        grades: state.grades,
+        modules: state.modules,
+        announcements: state.announcements,
+      },
       history,
       message,
     );
-    return { ok: true, reply };
+    setState({ geminiUsage: getUsage() });
+    return { ok: true, reply, usage: getUsage() };
   } catch (error) {
+    setState({ geminiUsage: getUsage() });
     return {
       ok: false,
       message: error.message || 'Something went wrong talking to Gemini.',
@@ -415,12 +492,24 @@ ipcMain.handle('sign-out', () => {
     tasks: [],
     courses: [],
     grades: {},
+    modules: [],
+    announcements: [],
+    courseImages: {},
+    courseColors: {},
     fetchedAt: null,
     error: null,
     usedFavoritesFallback: false,
   };
   publish();
   return true;
+});
+
+/** Manual light/dark override. Passing null goes back to following the OS setting. */
+ipcMain.handle('set-theme-override', (_event, mode) => {
+  themeOverride = mode === 'dark' || mode === 'light' ? mode : null;
+  store.saveConfig({ themeOverride });
+  setState({ themeOverride, isDarkMode: computeIsDark() });
+  return themeOverride;
 });
 
 // Only ever hand https links to the OS browser.
@@ -430,6 +519,14 @@ ipcMain.handle('open-external', (_event, url) => {
 });
 
 ipcMain.on('hide-window', () => mainWindow && mainWindow.hide());
+
+ipcMain.on('minimize-window', () => mainWindow && mainWindow.minimize());
+
+ipcMain.on('toggle-maximize', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  else mainWindow.maximize();
+});
 
 ipcMain.on('quit-app', () => {
   isQuitting = true;
@@ -457,9 +554,12 @@ if (!app.requestSingleInstanceLock()) {
       console.warn(`Could not register global shortcut ${TOGGLE_SHORTCUT}`);
     }
 
-    // Follows the Windows light/dark setting live — no in-app toggle needed.
+    // Follows the Windows light/dark setting live, unless the user has
+    // clicked the in-app toggle — then their choice sticks until they toggle
+    // it back (there's no third "auto" state in the UI; clicking is a
+    // deliberate override).
     nativeTheme.on('updated', () => {
-      setState({ isDarkMode: nativeTheme.shouldUseDarkColors });
+      if (!themeOverride) setState({ isDarkMode: nativeTheme.shouldUseDarkColors });
     });
 
     app.on('activate', () => {

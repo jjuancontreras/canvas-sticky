@@ -58,6 +58,27 @@ const htmlToText = (html) => {
     .trim();
 };
 
+/**
+ * Same idea as htmlToText, but keeps hyperlinks instead of throwing them
+ * away — a `<a href="...">Join on Zoom</a>` becomes `Join on Zoom
+ * (https://...)`. This is what feeds the chatbot's context, so it can
+ * actually hand back a class's meeting link, a module item's link, etc.,
+ * as a plain URL the renderer then turns into a clickable link.
+ */
+const htmlToTextPreservingLinks = (html) => {
+  if (!html || typeof html !== 'string') return '';
+
+  const withLinks = html.replace(
+    /<a\b[^>]*\shref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+    (_, href, inner) => {
+      const label = inner.replace(/<[^>]+>/g, '').trim();
+      return label && label !== href ? `${label} (${href})` : href;
+    },
+  );
+
+  return htmlToText(withLinks);
+};
+
 // A control character that can never appear in real HTML text, used as a
 // throwaway line-break marker below — a literal space or newline would
 // collide with ordinary text and break the split.
@@ -152,14 +173,19 @@ const localDetail = (assignment) => {
  *   fullText - full cleaned text, kept only as AI prompt input (never rendered directly)
  */
 const summarize = (assignment = {}) => {
-  const fullText = truncate(htmlToText(assignment.description), FULL_TEXT_MAX_CHARS);
+  // The one-line card summary stays link-free — a raw "(https://...)" would
+  // just be clutter on a collapsed card. fullText keeps links, since that's
+  // what feeds the AI prompt and the chatbot's context, where a class's
+  // Zoom/Meet link or similar is exactly the kind of thing worth surfacing.
+  const plainText = truncate(htmlToText(assignment.description), FULL_TEXT_MAX_CHARS);
+  const fullText = truncate(htmlToTextPreservingLinks(assignment.description), FULL_TEXT_MAX_CHARS);
 
-  if (!fullText) {
+  if (!plainText) {
     const fallback = describeFromMetadata(assignment);
     return { summary: fallback, detail: fallback, fullText: fallback };
   }
 
-  const cleaned = fullText.replace(BOILERPLATE_PREFIX, '').trim() || fullText;
+  const cleaned = plainText.replace(BOILERPLATE_PREFIX, '').trim() || plainText;
   return {
     summary: truncate(cleaned, SUMMARY_MAX_CHARS),
     detail: localDetail(assignment),
@@ -167,4 +193,6 @@ const summarize = (assignment = {}) => {
   };
 };
 
-module.exports = { summarize, htmlToText, htmlToLines, localDetail, truncate, describeFromMetadata };
+module.exports = {
+  summarize, htmlToText, htmlToTextPreservingLinks, htmlToLines, localDetail, truncate, describeFromMetadata,
+};

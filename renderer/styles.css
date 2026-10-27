@@ -3,8 +3,11 @@
 :root {
   --paper: #fdf6e3;
   --paper-edge: #f4e7c3;
-  --head: #13294d;
-  --head-edge: #4a7fc9;
+  /* Canvas LMS's own global-nav slate (#394B58) as the base, with a lighter
+     step of the same hue for the gradient — matches the real Canvas look
+     instead of an invented blue. */
+  --head: #394b58;
+  --head-edge: #5f7789;
   --head-text: #eef4ff;
   --head-text-dim: #c7d9f2;
   --head-chip-text: #14294d;
@@ -49,10 +52,12 @@
    nativeTheme.shouldUseDarkColors into state, and app.js stamps it onto
    <html data-theme>. No manual toggle; it just tracks the OS. */
 :root[data-theme="dark"] {
-  --paper: #1e222a;
-  --paper-edge: #2a2f3a;
-  --head: #0b1930;
-  --head-edge: #2f5a92;
+  /* Lifted a shade from the original near-black slate so dark mode reads as
+     "dark", not "off". Header is a darker step of the same Canvas slate. */
+  --paper: #242a38;
+  --paper-edge: #343c50;
+  --head: #232e37;
+  --head-edge: #445c6e;
   --head-text: #eef4ff;
   --head-text-dim: #b9c9e6;
   --head-chip-text: #0f2140;
@@ -133,14 +138,52 @@ body {
 .note-head {
   background: linear-gradient(180deg, var(--head), var(--head-edge));
   border-bottom: 1px solid var(--head-edge);
-  padding: 4px var(--pad) 0;
+  /* Tighter than the body's own --pad — the header rows push their content
+     close to both edges instead of leaving the same generous margin the
+     task list uses. */
+  padding: 6px 6px 0;
   flex: none;
   -webkit-app-region: drag; /* the whole strip is the drag handle */
 }
 
+/* Brand block: the app name + window controls on one line, the credit line
+   + refresh timestamp on the next. A 3-column grid (rather than flex) keeps
+   the centered text genuinely centered even though its left/right neighbors
+   are different widths (one refresh icon vs. three window-control icons). */
 .brand-row {
-  text-align: center;
-  padding-bottom: 2px;
+  padding-bottom: 9px;
+}
+
+.brand-line {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  column-gap: 4px;
+}
+
+.brand-line + .brand-line {
+  margin-top: 1px;
+}
+
+.brand-slot-left,
+.brand-slot-right {
+  -webkit-app-region: no-drag; /* only the buttons opt out; the centered text stays draggable */
+}
+
+.brand-slot-left {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.brand-slot-center {
+  grid-column: 2;
+  justify-self: center;
+  white-space: nowrap;
+}
+
+.brand-slot-right {
+  grid-column: 3;
+  justify-self: end;
 }
 
 .brand {
@@ -149,28 +192,42 @@ body {
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--head-text-dim);
-  opacity: 0.65;
+  opacity: 0.7;
+}
+
+.brand-credit {
+  font-size: 8px;
+  letter-spacing: 0.2px;
+  color: var(--head-text-dim);
+  opacity: 0.45;
 }
 
 .head-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   min-height: 26px;
 }
 
 .head-row.sub {
+  gap: 8px;
   padding-bottom: 8px;
   -webkit-app-region: no-drag;
 }
 
-.grip {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.55) 1px, transparent 1.2px);
-  background-size: 4px 4px;
-  opacity: 0.8;
+/* Standard Windows window controls: minimize/maximize/close, left-to-right. */
+.win-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.win-btn svg {
+  stroke-width: 1.8;
+}
+
+#win-close:hover {
+  background: var(--overdue);
+  color: #fff;
 }
 
 .title {
@@ -231,6 +288,13 @@ body {
   stroke: none;
 }
 
+/* The moon reads better filled too — a crescent drawn with thin strokes
+   just looks like two arcs. */
+#theme-toggle .icon-moon {
+  fill: currentColor;
+  stroke: none;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -245,41 +309,45 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 5px;
   padding: 2px 4px;
-  max-width: 58%;
   cursor: pointer;
 }
 
-.credit {
-  flex: 1;
-  min-width: 0;
-  text-align: center;
-  font-size: 9px;
-  letter-spacing: 0.2px;
-  color: var(--head-text-dim);
-  opacity: 0.55;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.status-group {
-  flex: none;
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  white-space: nowrap;
-}
-
+/* Sits directly under the refresh icon, top-left-most of this row. */
 .status-time {
+  flex: none;
   font-size: 9.5px;
   color: var(--head-text-dim);
   opacity: 0.8;
+  white-space: nowrap;
 }
 
+/* A small pill badge rather than plain bold text — the due count is the one
+   number in the header worth a second of extra visual weight. */
 .status-count {
-  font-size: 13px;
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-size: 12px;
   font-weight: 750;
   color: var(--head-text);
+  white-space: nowrap;
+}
+
+.status-count svg {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* --------------------------------------------------------------- body --- */
@@ -334,6 +402,25 @@ body {
   background: var(--task-hover);
 }
 
+/* Wraps just the course-chip/due/title/tags row — the course's own Canvas
+   banner image sits very faintly behind exactly that block, sized to its own
+   content, and deliberately stops there so it never runs behind the
+   description text below. A translucent scrim of the paper color sits
+   between the image and the text so it stays a background detail. */
+.task-banner.has-course-bg {
+  --scrim: color-mix(in srgb, var(--paper) 90%, transparent);
+  background-image: linear-gradient(var(--scrim), var(--scrim)), var(--course-bg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  margin: -9px calc(-1 * var(--pad)) 6px -20px;
+  padding: 9px var(--pad) 6px 20px;
+}
+
+.task:hover .task-banner.has-course-bg {
+  --scrim: color-mix(in srgb, var(--paper) 78%, transparent);
+}
+
 .task.overdue {
   --band: var(--overdue);
 }
@@ -371,6 +458,15 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   flex: none;
+}
+
+/* The color you (or Canvas's default palette) assigned this course on your
+   dashboard — fetched from your own /users/self/colors, same one Canvas's
+   calendar and sidebar use. Canvas's palette is saturated enough that white
+   text reads fine on every color in it. */
+.course-chip.has-color {
+  background: var(--course-color);
+  color: #fff;
 }
 
 .due {
@@ -581,9 +677,21 @@ body {
 }
 
 .chat-popup-title {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   font-weight: 650;
   color: var(--head-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-popup-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .chat-popup-head .icon-btn {
@@ -593,6 +701,38 @@ body {
 .chat-popup-head .icon-btn:hover {
   background: rgba(255, 255, 255, 0.55);
   color: var(--head-chip-text);
+}
+
+/* Today's estimated Gemini usage, as a small donut — a conic-gradient ring
+   with a solid center punched out by the pseudo-element, so it reads as a
+   ring rather than a filled pie. Not read from Google (it doesn't expose
+   remaining quota); tracked locally against the model's published free-tier
+   daily limit, see gemini-client.js. */
+.usage-ring {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(#fff var(--pct, 0%), rgba(255, 255, 255, 0.25) 0);
+}
+
+.usage-ring::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--head);
+}
+
+.usage-ring span {
+  position: relative;
+  z-index: 1;
+  font-size: 6.5px;
+  font-weight: 700;
+  color: var(--head-text);
 }
 
 .note-foot:not([hidden]) ~ .chat-popup {
@@ -689,6 +829,21 @@ body {
 
 .chat-msg strong {
   font-weight: 700;
+}
+
+/* A link the chatbot (or an AI task breakdown) surfaced — a class's meeting
+   link, a module item, an announcement's own page, etc. Styled to inherit
+   the surrounding text color so it works in a user bubble (white on blue), a
+   model bubble (ink on chip), and the task detail list all alike. */
+.chat-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.chat-link:hover {
+  opacity: 0.8;
 }
 
 .chat-input-row {
